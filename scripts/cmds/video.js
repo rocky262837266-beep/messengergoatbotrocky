@@ -1,96 +1,96 @@
-const axios = require('axios');
-const yts = require("yt-search");
+const axios = require("axios");
+const fs = require('fs');
+const path = require('path');
 
 const baseApiUrl = async () => {
-    const base = await axios.get(
-        `https://raw.githubusercontent.com/Mostakim0978/D1PT0/refs/heads/main/baseApiUrl.json`
-    );
-    return base.data.api;
+    const base = await axios.get(`https://raw.githubusercontent.com/Rocky-mastermind/rocky-music-api/main/baseApiUrl.json`);
+    return base.data.rocky; 
 };
 
-(async () => {
-    global.apis = {
-        diptoApi: await baseApiUrl()
-    };
-})();
-
-async function getStreamFromURL(url, pathName) {
-    try {
-        const response = await axios.get(url, {
-            responseType: "stream"
-        });
-        response.data.path = pathName;
-        return response.data;
-    } catch (err) {
-        throw err;
-    }
-}
-
-global.utils = {
-    ...global.utils,
-    getStreamFromURL: global.utils.getStreamFromURL || getStreamFromURL
-};
-
-function getVideoID(url) {
-    const checkurl = /^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})(?:\S+)?$/;
-    const match = url.match(checkurl);
-    return match ? match[1] : null;
-}
-
-const config = {
-    name: "video",
-    author: "Mesbah Saxx",
-    credits: "Mesbah Saxx",
-    version: "1.0.0",
-    role: 0,
-    hasPermssion: 0,
-    description: "",
-    usePrefix: true,
-    prfix: true,
-    category: "media",
-    commandCategory: "media",
-    cooldowns: 5,
-    countDown: 5,
-};
-
-async function onStart({ api, args, event }) {
-    try {
-        let videoID,w;
-        const url = args[0];
-
-        if (url && (url.includes("youtube.com") || url.includes("youtu.be"))) {
-            videoID = getVideoID(url);
-            if (!videoID) {
-                await api.sendMessage("Invalid YouTube URL.", event.threadID, event.messageID);
-            }
-        } else {
-            const songName = args.join(' ');
-             w = await api.sendMessage(`Searching song "${songName}"... `, event.threadID);
-            const r = await yts(songName);
-            const videos = r.videos.slice(0, 50);
-
-            const videoData = videos[Math.floor(Math.random() * videos.length)];
-            videoID = videoData.videoId;
-        }
-
-        const { data: { title, quality, downloadLink } } = await axios.get(`${global.apis.diptoApi}/ytDl3?link=${videoID}&format=mp4`);
-
-        api.unsendMessage(w.messageID);
-        
-        const o = '.php';
-        const shortenedLink = (await axios.get(`https://tinyurl.com/api-create${o}?url=${encodeURIComponent(downloadLink)}`)).data;
-
-        await api.sendMessage({
-            body: `🔖 - 𝚃𝚒𝚝𝚕𝚎: ${title}\n✨ - 𝚀𝚞𝚊𝚕𝚒𝚝𝚢: ${quality}\n\n📥 - 𝙳𝚘𝚠𝚗𝚕𝚘𝚊𝚍 𝙻𝚒𝚗𝚔: ${shortenedLink}`,
-            attachment: await global.utils.getStreamFromURL(downloadLink, title+'.mp4')
-        }, event.threadID, event.messageID);
-    } catch (e) {
-        api.sendMessage(e.message || "An error occurred.", event.threadID, event.messageID);
-    }
-}
+/**
+* @author Rocky
+* @description do not delete or change the author name
+*/
 
 module.exports = {
-    config,
-    onStart,
-    run: onStart
+    config: {
+        name: "video",
+        version: "1.8",
+        author: "Rocky",
+        countDown: 10,
+        category: "media",
+        guide: { en: "{pn} <song name or link>" }
+    },
+
+    onStart: async ({ api, args, event }) => {
+        const obfuscatedAuthor = String.fromCharCode(82, 111, 99, 107, 121); // "Rocky"
+        if (module.exports.config.author !== obfuscatedAuthor) {
+            return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+        }
+        
+        const { threadID, messageID } = event;
+        if (!args[0]) return api.sendMessage(
+            "❌ Baby, Please provide a music name.\n\nExample: .video lofi chill beats",
+            threadID, messageID
+        );
+
+        try { api.setMessageReaction("🎵", messageID, () => {}, true); } catch (e) {}
+
+        const keyWord = args.join(" ");
+
+        try {
+            const apiUrl = await baseApiUrl();
+
+            // Search music from Rocky API
+            const searchRes = await axios.get(
+                `${apiUrl}/api/rocky?keyword=${encodeURIComponent(keyWord)}`,
+                { timeout: 15000 }
+            );
+
+            const results = searchRes.data;
+
+            if (!results || !Array.isArray(results) || results.length === 0) {
+                try { api.setMessageReaction("🥹", messageID, () => {}, true); } catch (e) {}
+                return api.sendMessage("❌ No music found for: " + keyWord, threadID, messageID);
+            }
+
+            const music = results[0];
+            const downloadLink = music.hdMusicUrl || music.musicUrl;
+            const title = music.title || keyWord;
+
+            if (!downloadLink) {
+                try { api.setMessageReaction("🥹", messageID, () => {}, true); } catch (e) {}
+                return api.sendMessage("❌ Could not get download link.", threadID, messageID);
+            }
+
+            // Download the video/music file
+            const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
+            const filePath = path.join(__dirname, `rocky_${safeTitle}_${Date.now()}.mp4`);
+
+            const fileBuffer = (await axios.get(downloadLink, {
+                responseType: "arraybuffer",
+                timeout: 30000
+            })).data;
+
+            fs.writeFileSync(filePath, Buffer.from(fileBuffer));
+
+            await api.sendMessage({
+                body: `🎵 𝙃𝙚𝙧𝙚'𝙨 𝙮𝙤𝙪𝙧 𝙢𝙪𝙨𝙞𝙘 𝙗𝙖𝙗𝙮 🎶\n\n• 𝐓𝐢𝐭𝐥𝐞: ${title}\n• 𝐀𝐮𝐭𝐡𝐨𝐫: Rocky`,
+                attachment: fs.createReadStream(filePath)
+            }, threadID, (err) => {
+                if (!err) {
+                    try { api.setMessageReaction("🪽", messageID, () => {}, true); } catch (e) {}
+                }
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            }, messageID);
+
+        } catch (e) {
+            console.error("[Rocky Video Error]", e.message);
+            try { api.setMessageReaction("🥹", messageID, () => {}, true); } catch (err) {}
+            return api.sendMessage(
+                "❌ Error: " + (e.message || "Something went wrong") + "\n\nTry again with a different keyword.",
+                threadID, messageID
+            );
+        }
+    }
 };

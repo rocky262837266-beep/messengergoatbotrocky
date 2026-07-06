@@ -4,6 +4,11 @@ const path = require("path");
 
 const __AUTHOR__ = "Rocky Chowdhury";
 
+const rocky = async () => {
+  const base = await axios.get("https://raw.githubusercontent.com/Rocky-mastermind/rv-api/main/baseApiUrl.json");
+  return base.data.rocky;
+};
+
 module.exports = {
   config: {
     name: "rv",
@@ -12,34 +17,82 @@ module.exports = {
     role: 0,
     shortDescription: "Send video from API",
     category: "media",
-    guide: "{pn}"
+    guide: "{pn} — Random Video\n{pn} list — Total videos\n{pn} add [imgur_link] — Add new video"
   },
 
-  onStart: async function ({ api, event }) {
+  onStart: async function ({ api, event, args }) {
     try {
-
       if (module.exports.config.author !== __AUTHOR__) {
         return api.sendMessage("❌ Unauthorized edit!", event.threadID, event.messageID);
       }
 
-      const url = "https://rv-rocky-9xet.onrender.com/rv";
+      const baseURL = await rocky();
 
-      // 🔁 retry system (3 times)
+      // ✅ LIST
+      if (args[0] === "list") {
+        const res = await axios.get(`${baseURL}/api/list`);
+        return api.sendMessage(
+          `🎬 Total Videos: ${res.data.total}`,
+          event.threadID, event.messageID
+        );
+      }
+
+      // ✅ ADD
+      if (args[0] === "add") {
+        const fullText = args.slice(1).join(" ");
+        const urls = fullText.match(/https?:\/\/[^\s\[\]<>\"]+/gi);
+
+        if (!urls || urls.length < 1) {
+          return api.sendMessage(
+            "⚠️ Imgur video link দাও:\n.rv add https://i.imgur.com/xxx.mp4",
+            event.threadID, event.messageID
+          );
+        }
+
+        const videoUrl = urls[0].trim();
+        await api.sendMessage("⏳ Adding video, please wait...", event.threadID, event.messageID);
+
+        try {
+          const addRes = await axios.post(`${baseURL}/api/add`, {
+            videoUrl,
+            secret: "rocky_rv_2025"
+          });
+
+          return api.sendMessage(
+            `✅ নতুন Video add হয়েছে!\n🎬 URL: ${addRes.data.url}\n📊 Total: ${addRes.data.total}`,
+            event.threadID, event.messageID
+          );
+        } catch (err) {
+          return api.sendMessage(
+            `❌ ${err.response?.data?.error || err.message}`,
+            event.threadID, event.messageID
+          );
+        }
+      }
+
+      // ✅ RANDOM VIDEO
+      const res = await axios.get(`${baseURL}/api/rv`);
+      const { url } = res.data;
+
+      if (!url) return api.sendMessage("⚠️ কোনো video পাওয়া যায়নি!", event.threadID, event.messageID);
+
       for (let i = 0; i < 3; i++) {
         try {
+          const filePath = path.join(__dirname, "cache", `rv_${Date.now()}.mp4`);
+          fs.ensureDirSync(path.dirname(filePath));
 
           const response = await axios({
             method: "GET",
             url,
             responseType: "stream",
-            timeout: 15000
+            timeout: 30000,
+            headers: {
+              "User-Agent": "Mozilla/5.0",
+              "Referer": "https://imgur.com"
+            }
           });
 
-          // ❌ যদি stream না আসে
           if (!response || !response.data) throw new Error("No stream");
-
-          const filePath = path.join(__dirname, "cache", `rv_${Date.now()}.mp4`);
-          fs.ensureDirSync(path.dirname(filePath));
 
           const writer = fs.createWriteStream(filePath);
           response.data.pipe(writer);
@@ -49,17 +102,15 @@ module.exports = {
             writer.on("error", reject);
           });
 
-          // ❌ empty file check
           const stats = fs.statSync(filePath);
-          if (stats.size < 50000) { // 50KB এর কম মানে invalid
+          if (stats.size < 1000) {
             fs.unlinkSync(filePath);
             throw new Error("Empty video");
           }
 
-          // ✅ send video
           return api.sendMessage(
             {
-              body: "🎬 Here's your video",
+              body: "🎬 Here's your video!",
               attachment: fs.createReadStream(filePath)
             },
             event.threadID,
@@ -68,23 +119,20 @@ module.exports = {
           );
 
         } catch (err) {
-          console.log(`Retry ${i + 1} failed`);
+          console.log(`Retry ${i + 1} failed:`, err.message);
         }
       }
 
-      // ❌ সব retry fail হলে
       return api.sendMessage(
         "❌ Video load failed! Try again...",
-        event.threadID,
-        event.messageID
+        event.threadID, event.messageID
       );
 
     } catch (err) {
-      console.error(err);
+      console.error("RV Error:", err.message);
       return api.sendMessage(
-        "❌ Unexpected error!",
-        event.threadID,
-        event.messageID
+        `❌ Error: ${err.response?.data?.error || err.message}`,
+        event.threadID, event.messageID
       );
     }
   }

@@ -59,6 +59,9 @@
                 "dev": "NODE_ENV=development node index.js",
                 "prod": "NODE_ENV=production node index.js"
         },
+        "overrides": {
+                "fca-unofficial": "git+https://github.com/VangBanLaNhat/fca-unofficial.git"
+        },
         "author": "NTKhang",
         "license": "MIT",
         "repository": {

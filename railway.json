@@ -6,12 +6,6 @@
   "deploy": {
     "startCommand": "npm start",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 100,
-    "proxyTimeout": 100
-  },
-  "env": {
-    "NODE_ENV": "production"
+    "restartPolicyMaxRetries": 10
   }
 }
